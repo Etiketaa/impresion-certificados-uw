@@ -49,10 +49,20 @@ vercel --proda  # producción
   (`"N°"` → `"n"`) para no confundirse con cualquier otra columna que contenga
   la letra "n". *No volver a usar substring para esa columna.*
 - **El rango de impresión es por N° de certificado (columna C), no por fila.**
-  Los N° son correlativos. La selección filtra por el valor de cada fila
-  (`certNumOf`), así que respeta huecos y N° fuera de orden, y no hay que contar
-  filas. `loadSheet` deja los campos con el mín/máx de certificados de la hoja.
-  Si la hoja no tiene N° numéricos (ej. `Esporadicos`), cae a selección por fila.
+  *Los N° NO son correlativos* en varias hojas: hay huecos (Junio 25 falta 148,
+  163, 164; AGOSTO 26 falta 1193, 1197, 1212, 1265, 1267, 1272) y filas fuera de
+  orden (Julio 25: 195, 198, 223, 235; Octubre 25: 418). La selección filtra por
+  el valor de cada fila (`certNumOf`) y **ordena ascendente** por N° antes de
+  armar las hojas (`generatePreview`), así la impresión sale 1,2,3… sin importar
+  el orden de la planilla. **El N° se imprime literal de la columna: nunca se
+  renumera ni se rellenan huecos** (si falta el 1193, salen 1192 y 1194). Si el
+  rango tiene huecos o repetidos, avisa en la
+  vista previa (`faltantesDeRango` / `numerosRepetidos` vía `showStatus`), y ese
+  aviso **no se imprime** (`.status-msg` se oculta en `@media print`). Nota:
+  `faltantesDeRango` solo corre con `ns.length > 1` para no avisar en rangos de
+  un solo N°. `loadSheet` deja los campos con el mín/máx de certificados de la
+  hoja. Si la hoja no tiene N° numéricos (ej. `Esporadicos`), cae a selección por
+  fila.
 
 ## Fuente de verdad de los datos
 
@@ -66,6 +76,13 @@ Algunas hojas nuevas pueden tener menos columnas o no tener encabezado.
 - El navegador de verificación (browser tool) no puede hacer drag & drop; para
   probar se inyecta el workbook por `browser.evaluate` (fetch al archivo servido
   + `XLSX.read`).
+- **Trampa al inyectar un `<script>` de prueba en `index.html`:** la **primera**
+  ocurrencia de `</body>` en el archivo **no** es el cierre del documento, sino el
+  string `var Wm="</body></html>"` **dentro del bundle de SheetJS** (línea ~26). Un
+  `replace('</body>', …)` a secas mete el `<script>` en medio del bundle y lo
+  rompe (síntoma: `SyntaxError: Unexpected identifier 'load'`, y `XLSX` queda
+  `undefined`). Anclar la inyección a algo único (`<head>`, o el `</body>` final)
+  y verificar con `node --check` que el bundle sigue siendo JS válido.
 - El archivo pesa ~900 KB por SheetJS incrustado. Es esperado, no es un error.
 - Reemplazar SheetJS: descargar `xlsx.full.min.js` e inlinearlo; **no** dejar un
   `<script src=cdn>` porque la herramienta debe andar offline.

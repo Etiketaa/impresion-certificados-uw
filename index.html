@@ -907,13 +907,37 @@ function generatePreview() {
   const hasCertNums = certNums.some(n => n !== null);
 
   let slice;
+  const notes = [];
   if (hasCertNums) {
     const desde = parseFloat(rangeStart.value);
     const hasta = parseFloat(rangeEnd.value);
     const lo = isFinite(desde) ? desde : -Infinity;
     const hi = isFinite(hasta) ? hasta : Infinity;
     const [min, max] = lo <= hi ? [lo, hi] : [hi, lo];
-    slice = parsedRows.filter((row, i) => certNums[i] !== null && certNums[i] >= min && certNums[i] <= max);
+
+    // Selección por valor y orden correlativo ascendente: la planilla puede
+    // traer filas desordenadas, pero la impresión sale siempre 1,2,3…
+    const conNum = parsedRows
+      .map((row, i) => ({ row, n: certNums[i] }))
+      .filter(x => x.n !== null && x.n >= min && x.n <= max)
+      .sort((a, b) => a.n - b.n);
+
+    // Avisos de correlatividad dentro del rango impreso
+    const ns = conNum.map(x => x.n);
+    if (ns.length > 1) {
+      const falta = faltantesDeRango(ns);
+      if (falta.length) notes.push({
+        type: 'warning',
+        msg: 'Faltan N° de certificado en el rango impreso: ' + listarNumeros(falta) +
+             '. No están en la planilla.'
+      });
+      const rep = numerosRepetidos(ns);
+      if (rep.length) notes.push({
+        type: 'warning',
+        msg: 'N° de certificado repetidos en el rango: ' + listarNumeros(rep) + '.'
+      });
+    }
+    slice = conNum.map(x => x.row);
   } else {
     const start = Math.max(0, parseInt(rangeStart.value) - 1 || 0);
     const end = Math.min(parsedRows.length, parseInt(rangeEnd.value) || parsedRows.length);
@@ -944,7 +968,31 @@ function generatePreview() {
   document.getElementById('statPages').textContent = pages.length;
   document.getElementById('statCerts').textContent = slice.length;
 
-  showStatus('success', 'Vista previa generada: ' + pages.length + ' página(s), ' + slice.length + ' certificado(s).');
+  showStatus('success', 'Vista previa generada: ' + pages.length + ' página(s), ' + slice.length + ' certificado(s).', notes);
+}
+
+// N° de certificado enteros que faltan entre el mínimo y el máximo de una lista
+// (los N° son enteros). Devuelve [] si el rango está completo.
+function faltantesDeRango(nums) {
+  if (!nums.length) return [];
+  const presentes = new Set(nums);
+  const lo = Math.min(...nums), hi = Math.max(...nums);
+  const falta = [];
+  for (let n = lo; n <= hi; n++) if (!presentes.has(n)) falta.push(n);
+  return falta;
+}
+
+// N° que aparecen más de una vez, ordenados.
+function numerosRepetidos(nums) {
+  const cuenta = new Map();
+  nums.forEach(n => cuenta.set(n, (cuenta.get(n) || 0) + 1));
+  return [...cuenta.entries()].filter(([, c]) => c > 1).map(([n]) => n).sort((a, b) => a - b);
+}
+
+// Lista legible de números, acotada para no llenar la pantalla.
+function listarNumeros(nums, max = 12) {
+  const visibles = nums.slice(0, max).join(', ');
+  return nums.length > max ? visibles + ' (+' + (nums.length - max) + ' más)' : visibles;
 }
 
 // ──────────────────────────────────────────────
@@ -1042,8 +1090,12 @@ btnPrint.addEventListener('click', () => window.print());
 // ──────────────────────────────────────────────
 // Utilities
 // ──────────────────────────────────────────────
-function showStatus(type, msg) {
-  statusArea.innerHTML = '<div class="status-msg ' + type + '">' + escapeHtml(msg) + '</div>';
+function showStatus(type, msg, notes) {
+  let html = '<div class="status-msg ' + type + '">' + escapeHtml(msg) + '</div>';
+  if (notes) notes.forEach(n => {
+    html += '<div class="status-msg ' + n.type + '">' + escapeHtml(n.msg) + '</div>';
+  });
+  statusArea.innerHTML = html;
 }
 
 function escapeHtml(str) {
