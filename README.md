@@ -12,7 +12,10 @@ se arrastra el Excel, se elige el mes y se imprime. **Sin instalar nada.**
 
 1. **Arrastrás el Excel** (`MUNICIPALIDAD CERTIFICADOS 2025.xls`) al recuadro.
 2. **Elegís la hoja del mes** (se autoselecciona el mes en curso si existe).
-3. **Revisás los datos** en la tabla y ajustás el rango de filas a imprimir.
+3. **Revisás los datos** en la tabla y elegís el rango **por N° de certificado**
+   (`Desde N° cert.` / `Hasta N° cert.`). Los N° son correlativos: no hace falta
+   contar filas. Al cargar la hoja los campos se llenan solos con el mínimo y el
+   máximo de la columna C.
 4. **Vista previa** con 2 certificados por hoja A4, posicionados exactamente sobre
    las líneas del membrete.
 5. **Imprimís** desde el navegador (Ctrl+P o botón). Elegir *Sin márgenes* /
@@ -30,6 +33,9 @@ se arrastra el Excel, se elige el mes y se imprime. **Sin instalar nada.**
   El segundo certificado de la hoja se deriva sumando **135.7 mm** en Y.
 - **Detección de columnas por nombre** (tolerante a acentos, mayúsculas y orden),
   con fallback posicional si la hoja no tiene fila de encabezado.
+- **Selección por N° de certificado** (columna C). Filtra por el valor real de cada
+  fila, respetando huecos y números fuera de orden de la planilla. Si una hoja no
+  tiene N° numéricos, cae a selección por fila para no romperse.
 - **Formato de salida** idéntico al Word original: `Domicilio + N°`, fechas
   `DD/MM/YYYY`, Tahoma 12pt.
 

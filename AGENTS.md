@@ -37,6 +37,11 @@ vercel --proda  # producción
   La columna `N°` (altura del domicilio) se matchea **solo por igualdad exacta**
   (`"N°"` → `"n"`) para no confundirse con cualquier otra columna que contenga
   la letra "n". *No volver a usar substring para esa columna.*
+- **El rango de impresión es por N° de certificado (columna C), no por fila.**
+  Los N° son correlativos. La selección filtra por el valor de cada fila
+  (`certNumOf`), así que respeta huecos y N° fuera de orden, y no hay que contar
+  filas. `loadSheet` deja los campos con el mín/máx de certificados de la hoja.
+  Si la hoja no tiene N° numéricos (ej. `Esporadicos`), cae a selección por fila.
 
 ## Fuente de verdad de los datos
 

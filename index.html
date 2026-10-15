@@ -452,12 +452,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <select id="sheetSelect"></select>
     </div>
     <div class="control-group">
-      <label for="rangeStart">Desde fila</label>
-      <input type="number" id="rangeStart" value="1" min="1">
+      <label for="rangeStart">Desde N° cert.</label>
+      <input type="number" id="rangeStart" value="1" min="1" title="N° de certificado (columna C) desde el que imprimir">
     </div>
     <div class="control-group">
-      <label for="rangeEnd">Hasta fila</label>
-      <input type="number" id="rangeEnd" value="10" min="1">
+      <label for="rangeEnd">Hasta N° cert.</label>
+      <input type="number" id="rangeEnd" value="10" min="1" title="N° de certificado (columna C) hasta el que imprimir">
     </div>
     <button class="btn btn-primary" id="btnPreview">👁️ Vista previa</button>
     <button class="btn btn-success" id="btnPrint" disabled>🖨️ Imprimir todo</button>
@@ -657,11 +657,22 @@ function loadSheet() {
   // Map column indices
   const colMap = detectColumns(headers);
 
-  // Update range inputs
-  rangeStart.value = 1;
-  rangeEnd.value = parsedRows.length;
-  rangeStart.max = parsedRows.length;
-  rangeEnd.max = parsedRows.length;
+  // Update range inputs — el rango se maneja por N° de certificado (columna C)
+  const certNums = parsedRows.map(r => certNumOf(r, colMap)).filter(n => n !== null);
+  if (certNums.length) {
+    const minCert = Math.min(...certNums);
+    const maxCert = Math.max(...certNums);
+    rangeStart.value = minCert;
+    rangeEnd.value = maxCert;
+    rangeStart.max = maxCert;
+    rangeEnd.max = maxCert;
+  } else {
+    // La hoja no tiene N° de certificado reconocibles: fallback por fila
+    rangeStart.value = 1;
+    rangeEnd.value = parsedRows.length;
+    rangeStart.max = parsedRows.length;
+    rangeEnd.max = parsedRows.length;
+  }
 
   // Render table
   renderTable(colMap);
@@ -721,6 +732,17 @@ function detectColumns(hdrs) {
   };
 }
 
+// N° de certificado de una fila, como número (null si no es válido).
+// Los N° son correlativos: permiten seleccionar el rango sin contar filas.
+function certNumOf(row, colMap) {
+  const idx = colMap.numCert;
+  if (idx < 0) return null;
+  const raw = String(row[idx] === undefined || row[idx] === null ? '' : row[idx]).trim();
+  if (!raw) return null;
+  const n = parseFloat(raw.replace(',', '.'));
+  return isFinite(n) ? n : null;
+}
+
 // ──────────────────────────────────────────────
 // Render data table
 // ──────────────────────────────────────────────
@@ -761,12 +783,28 @@ function generatePreview() {
   }
 
   const colMap = detectColumns(headers);
-  const start = Math.max(0, parseInt(rangeStart.value) - 1);
-  const end = Math.min(parsedRows.length, parseInt(rangeEnd.value));
-  const slice = parsedRows.slice(start, end);
+
+  // Selección por N° de certificado (columna C). Si la hoja no tiene N° válidos,
+  // se cae a la selección por número de fila para no romper hojas especiales.
+  const certNums = parsedRows.map(r => certNumOf(r, colMap));
+  const hasCertNums = certNums.some(n => n !== null);
+
+  let slice;
+  if (hasCertNums) {
+    const desde = parseFloat(rangeStart.value);
+    const hasta = parseFloat(rangeEnd.value);
+    const lo = isFinite(desde) ? desde : -Infinity;
+    const hi = isFinite(hasta) ? hasta : Infinity;
+    const [min, max] = lo <= hi ? [lo, hi] : [hi, lo];
+    slice = parsedRows.filter((row, i) => certNums[i] !== null && certNums[i] >= min && certNums[i] <= max);
+  } else {
+    const start = Math.max(0, parseInt(rangeStart.value) - 1 || 0);
+    const end = Math.min(parsedRows.length, parseInt(rangeEnd.value) || parsedRows.length);
+    slice = parsedRows.slice(start, end);
+  }
 
   if (!slice.length) {
-    showStatus('warning', 'Rango vacío.');
+    showStatus('warning', 'No hay certificados en el rango indicado.');
     return;
   }
 
@@ -787,6 +825,7 @@ function generatePreview() {
   btnPrintTop.disabled = false;
 
   document.getElementById('statPages').textContent = pages.length;
+  document.getElementById('statCerts').textContent = slice.length;
 
   showStatus('success', 'Vista previa generada: ' + pages.length + ' página(s), ' + slice.length + ' certificado(s).');
 }
