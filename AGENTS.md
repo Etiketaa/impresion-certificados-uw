@@ -33,6 +33,17 @@ vercel --proda  # producción
   (`GEOMETRIA.md` en `/home/franco/Ultrawhite/plantilla-certificados/`).
   - Caja inferior = caja superior + **135.7 mm** en Y.
   - `BASE_ADJ = 0.7 mm`: el dato se apoya sobre la línea impresa.
+  - **La base (no la caja) va sobre la regla**: `top = (y_regla − 0.7) − ascendente`.
+    `fieldAscentMM()` mide el ascendente real en el DOM (fallback 4.35 mm, el mismo
+    del `build.py` de la plantilla Word). No volver a poner `top = y − 0.7` a secas:
+    el texto queda ~4.4 mm bajo la línea.
+- **La impresión arranca en (0,0) de la hoja.** En `@media print` se pone
+  `.app-main` en `display:block; padding:0; margin:0; max-width:none` y se limpian
+  `.preview-section` / `.preview-body`. Si no, el `padding`+`gap` del contenedor
+  meten la hoja ~13 mm abajo (y genera una página de más). `@page { size:A4; margin:0 }`.
+- **Ajuste fino (control de calibración).** `offX`/`offY` (±15 mm, paso 0.1)
+  desplazan todos los campos; se guardan en `localStorage` (`uw_print_offset_mm`).
+  Sirve para corregir el corrimiento propio de la impresora sin tocar el código.
 - **Detección de columnas** por nombre, normalizando acentos/mayúsculas/espacios.
   La columna `N°` (altura del domicilio) se matchea **solo por igualdad exacta**
   (`"N°"` → `"n"`) para no confundirse con cualquier otra columna que contenga

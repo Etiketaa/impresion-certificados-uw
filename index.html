@@ -179,6 +179,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     outline: 2px solid var(--clr-primary);
     outline-offset: -1px;
   }
+  .offset-row { display: flex; gap: var(--sp-sm); }
+  .control-group .offset-row input { min-width: 0; width: 74px; }
 
   /* ── Buttons ── */
   .btn {
@@ -398,25 +400,42 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     .preview-header,
     .status-msg,
     .no-print { display: none !important; }
+    /* En impresión, la página A4 debe arrancar en el origen (0,0) de la
+       hoja. El contenedor de la app (padding/flex/gap) y el marco de la
+       vista previa se neutralizan para que no desplacen el contenido. */
+    .app-main {
+      display: block !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: none !important;
+    }
     .preview-body {
       background: none !important;
       padding: 0 !important;
+      margin: 0 !important;
       gap: 0 !important;
       max-height: none !important;
       overflow: visible !important;
+      display: block !important;
     }
     .preview-section {
       box-shadow: none !important;
       border-radius: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
     }
     .a4-page {
       box-shadow: none !important;
       margin: 0 !important;
+      border: 0 !important;
       page-break-after: always;
+      break-after: page;
       width: 210mm !important;
       height: 297mm !important;
+      overflow: hidden !important;
     }
-    .a4-page:last-child { page-break-after: auto; }
+    .a4-page:last-child { page-break-after: auto; break-after: auto; }
   }
 </style>
 </head>
@@ -458,6 +477,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     <div class="control-group">
       <label for="rangeEnd">Hasta N° cert.</label>
       <input type="number" id="rangeEnd" value="10" min="1" title="N° de certificado (columna C) hasta el que imprimir">
+    </div>
+    <div class="control-group">
+      <label for="offX">Ajuste fino X / Y (mm)</label>
+      <div class="offset-row">
+        <input type="number" id="offX" value="0" step="0.1" min="-15" max="15" title="Desplazamiento horizontal de impresión, en mm">
+        <input type="number" id="offY" value="0" step="0.1" min="-15" max="15" title="Desplazamiento vertical de impresión, en mm">
+      </div>
     </div>
     <button class="btn btn-primary" id="btnPreview">👁️ Vista previa</button>
     <button class="btn btn-success" id="btnPrint" disabled>🖨️ Imprimir todo</button>
@@ -525,6 +551,56 @@ const FIELDS = {
 
 const BASE_ADJ = 0.7; // data sits 0.7mm above the rule line
 
+// Distancia del borde superior de la caja de texto hasta la LÍNEA BASE.
+// El CSS posiciona el borde superior, no la base: hay que restar el
+// ascendente de la fuente. Se mide sobre el DOM real (probeta inline-block
+// alineada a la base), así vale para cualquier fuente/navegador. Si no se
+// puede medir, cae a 4.35 mm — el valor del pipeline Word validado.
+function measureFieldAscentMM() {
+  try {
+    const host = document.createElement('div');
+    host.className = 'a4-page';
+    host.style.cssText = 'position:absolute;left:-300mm;top:0;';
+    const probe = document.createElement('div');
+    probe.className = 'cert-field';
+    probe.style.cssText = 'left:0;top:0;width:50mm;';
+    const marker = document.createElement('span');
+    // Un inline-block vacío se apoya con su borde inferior sobre la base.
+    marker.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline;';
+    probe.appendChild(marker);
+    host.appendChild(probe);
+    document.body.appendChild(host);
+    const top = probe.getBoundingClientRect().top;
+    const baseline = marker.getBoundingClientRect().bottom;
+    document.body.removeChild(host);
+    const px = baseline - top;
+    if (px > 0 && px < 40) return px / (96 / 25.4);
+  } catch (e) { /* seguir con el fallback */ }
+  return null;
+}
+
+let _fieldAscentMM = null;
+function fieldAscentMM() {
+  if (_fieldAscentMM === null) {
+    _fieldAscentMM = measureFieldAscentMM();
+    if (_fieldAscentMM === null) {
+      // Fallback: métricas de canvas, o el ascendente de Tahoma (4.35 mm).
+      try {
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = '12pt Tahoma, "Segoe UI", sans-serif';
+        const m = ctx.measureText('Hg');
+        if (isFinite(m.fontBoundingBoxAscent) && isFinite(m.fontBoundingBoxDescent)) {
+          const lineH = 12 * 96 / 72;
+          const halfLeading = (lineH - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2;
+          _fieldAscentMM = (halfLeading + m.fontBoundingBoxAscent) / (96 / 25.4);
+        }
+      } catch (e) { /* usar constante */ }
+      if (_fieldAscentMM === null) _fieldAscentMM = 4.35;
+    }
+  }
+  return _fieldAscentMM;
+}
+
 // ──────────────────────────────────────────────
 // State
 // ──────────────────────────────────────────────
@@ -553,6 +629,47 @@ const tableBody = document.getElementById('tableBody');
 const tableStatus = document.getElementById('tableStatus');
 const previewSection = document.getElementById('previewSection');
 const previewBody = document.getElementById('previewBody');
+const offX = document.getElementById('offX');
+const offY = document.getElementById('offY');
+
+// ──────────────────────────────────────────────
+// Ajuste fino de impresión (mm), acotado y persistente
+// ──────────────────────────────────────────────
+const OFFSET_KEY = 'uw_print_offset_mm';
+const OFFSET_LIMIT = 15; // ±15 mm: suficiente para calibrar, acotado de más error
+function clampOffset(v) {
+  v = parseFloat(v);
+  if (!isFinite(v)) return 0;
+  return Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, v));
+}
+function readOffset() {
+  return { dx: clampOffset(offX.value), dy: clampOffset(offY.value) };
+}
+function saveOffset() {
+  try { localStorage.setItem(OFFSET_KEY, JSON.stringify(readOffset())); } catch (e) {}
+}
+function loadOffset() {
+  try {
+    const o = JSON.parse(localStorage.getItem(OFFSET_KEY) || '{}');
+    if (o && typeof o === 'object') {
+      offX.value = clampOffset(o.dx);
+      offY.value = clampOffset(o.dy);
+    }
+  } catch (e) {}
+}
+let _offsetTimer = null;
+function onOffsetChange() {
+  saveOffset();
+  clearTimeout(_offsetTimer);
+  _offsetTimer = setTimeout(() => {
+    if (previewBody.querySelector('.a4-page')) generatePreview();
+  }, 150);
+}
+[offX, offY].forEach(el => {
+  el.addEventListener('input', onOffsetChange);
+  el.addEventListener('change', () => { el.value = clampOffset(el.value); onOffsetChange(); });
+});
+loadOffset();
 
 // ──────────────────────────────────────────────
 // Drop zone events
@@ -836,6 +953,7 @@ function generatePreview() {
 function createA4Page(pair, colMap) {
   const page = document.createElement('div');
   page.className = 'a4-page';
+  const off = readOffset();
 
   pair.forEach((row, boxIdx) => {
     if (!row) return;
@@ -851,9 +969,13 @@ function createA4Page(pair, colMap) {
       el.textContent = value;
 
       const x = pos.x0;
-      const y = pos.y + yOff - BASE_ADJ;
-      el.style.left = x + 'mm';
-      el.style.top = y + 'mm';
+      // La base del dato debe apoyarse sobre la línea impresa (y - 0.7mm).
+      // El borde superior de la caja queda el ascendente de la fuente más
+      // arriba que esa base.
+      const baseline = pos.y + yOff - BASE_ADJ;
+      const y = baseline - fieldAscentMM();
+      el.style.left = (x + off.dx) + 'mm';
+      el.style.top = (y + off.dy) + 'mm';
       el.style.width = pos.w + 'mm';
 
       page.appendChild(el);

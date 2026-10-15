@@ -20,6 +20,9 @@ se arrastra el Excel, se elige el mes y se imprime. **Sin instalar nada.**
    las líneas del membrete.
 5. **Imprimís** desde el navegador (Ctrl+P o botón). Elegir *Sin márgenes* /
    *Tamaño real (100%)* para que las posiciones calcen con el papel.
+6. Si la impresora tiene un corrimiento propio (hardware), se corrige con el
+   **Ajuste fino X / Y (mm)** del panel, sin tocar el código. Es acotado a ±15 mm
+   y queda guardado en el navegador.
 
 ---
 
@@ -31,6 +34,15 @@ se arrastra el Excel, se elige el mes y se imprime. **Sin instalar nada.**
 - **Posicionamiento en mm absolutos.** Cada dato se coloca en coordenadas exactas
   medidas sobre el escaneo del membrete (`GEOMETRIA.md` de la plantilla original).
   El segundo certificado de la hoja se deriva sumando **135.7 mm** en Y.
+- **Alineación por línea base, no por caja.** El CSS posiciona el borde superior
+  de cada dato; sobre la regla impresa lo que debe caer es la **línea base**
+  (`y_regla − 0.7 mm`, igual que el pipeline Word validado). Por eso se resta el
+  ascendente real de la fuente, medido en el DOM en tiempo de ejecución
+  (`fieldAscentMM()`; fallback 4.35 mm). Sin esto, el texto cae ~4.4 mm por debajo
+  de la regla.
+- **Impresión desde el origen.** En `@media print` se neutralizan el padding, el
+  flex y el `gap` de `.app-main` y el marco de la vista previa, de modo que la
+  hoja A4 arranca en (0,0) y no se desplaza hacia abajo (antes ~13 mm).
 - **Detección de columnas por nombre** (tolerante a acentos, mayúsculas y orden),
   con fallback posicional si la hoja no tiene fila de encabezado.
 - **Selección por N° de certificado** (columna C). Filtra por el valor real de cada
@@ -90,8 +102,19 @@ diálogo de impresión del navegador:
 - Tamaño papel: **A4**
 - Escala: **100% / Tamaño real** (no "ajustar a página")
 - Márgenes: **Ninguno**
+- **Encabezados y pies de página: desactivados** (para que el navegador no agregue
+  fecha, título ni URL)
 - Gráficos de fondo: **activado** (si se quisiera imprimir el marco; por defecto
   solo salen los datos)
+
+La hoja se genera a **tamaño exacto A4** (`@page { size: A4; margin: 0 }`), así que
+con esa configuración los datos caen 1:1 sobre las líneas del membrete, sin escalar.
+
+> **Calibración física pendiente.** La posición se validó contra el pipeline Word
+> ya usado con el cliente (desvío < 0.2 mm) y contra líneas de referencia en mm.
+> Falta la prueba final impresa: imprimir **una** hoja de prueba sobre el membrete
+> real y confirmar en papel que cada dato apoya sobre su línea. Si hay un
+> corrimiento propio de la impresora, corregirlo con el *Ajuste fino X / Y*.
 
 ---
 
